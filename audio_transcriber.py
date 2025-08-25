@@ -15,6 +15,7 @@ import json
 from typing import Optional, List, Dict, Tuple
 import warnings
 import numpy as np
+import re
 
 # Suppress some warnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -386,42 +387,73 @@ class AudioTranscriber:
         
         print(f"💾 Transcript saved: {output_path}")
     
+    def _split_into_sentences(self, text: str) -> List[str]:
+        """
+        Split text into sentences using regex patterns.
+        Handles common abbreviations and edge cases.
+        """
+        if not text.strip():
+            return []
+        
+        # Common abbreviations that shouldn't trigger sentence breaks
+        abbreviations = r'(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|etc|i\.e|e\.g|a\.m|p\.m|U\.S|U\.K)'
+        
+        # First, protect abbreviations by replacing periods with a placeholder
+        protected_text = re.sub(f'({abbreviations})\.', r'\1<ABBREV>', text, flags=re.IGNORECASE)
+        
+        # Split on sentence-ending punctuation followed by whitespace and capital letter or end
+        sentence_pattern = r'([.!?]+)\s+(?=[A-Z]|$)'
+        parts = re.split(sentence_pattern, protected_text)
+        
+        sentences = []
+        for i in range(0, len(parts) - 1, 2):
+            sentence = parts[i]
+            if i + 1 < len(parts):
+                sentence += parts[i + 1]  # Add the punctuation back
+            
+            # Restore abbreviations
+            sentence = sentence.replace('<ABBREV>', '.')
+            sentence = sentence.strip()
+            
+            if sentence:
+                sentences.append(sentence)
+        
+        # Handle the last part if it doesn't end with punctuation
+        if len(parts) % 2 == 1:
+            last_part = parts[-1].replace('<ABBREV>', '.').strip()
+            if last_part:
+                sentences.append(last_part)
+        
+        return sentences if sentences else [text.strip()]
+    
     def _write_speaker_formatted_text(self, result: Dict, file):
         """
         Write transcript in a speaker-formatted text format.
-        Groups consecutive segments from the same speaker.
+        Each sentence gets its own paragraph with speaker identification.
         """
         if not result.get('segments'):
-            file.write(result.get('text', '').strip())
+            text = result.get('text', '').strip()
+            if text:
+                sentences = self._split_into_sentences(text)
+                for sentence in sentences:
+                    file.write(f"Unknown: {sentence}\n\n")
             return
-        
-        current_speaker = None
-        current_text = []
         
         for segment in result['segments']:
             speaker = segment.get('speaker', 'Unknown')
             text = segment['text'].strip()
             
-            if speaker != current_speaker:
-                # Write the previous speaker's content
-                if current_speaker is not None and current_text:
-                    combined_text = ' '.join(current_text).strip()
-                    if combined_text:
-                        file.write(f"{current_speaker}: {combined_text}\n\n")
+            if text:
+                # Split the segment text into sentences
+                sentences = self._split_into_sentences(text)
                 
-                # Start new speaker
-                current_speaker = speaker
-                current_text = [text] if text else []
-            else:
-                # Continue with same speaker
-                if text:
-                    current_text.append(text)
+                for sentence in sentences:
+                    if sentence.strip():
+                        file.write(f"{speaker}: {sentence.strip()}\n\n")
         
-        # Write the last speaker's content
-        if current_speaker is not None and current_text:
-            combined_text = ' '.join(current_text).strip()
-            if combined_text:
-                file.write(f"{current_speaker}: {combined_text}\n")
+        # Remove the extra newline at the end
+        file.seek(file.tell() - 1)
+        file.truncate()
     
     def _format_timestamp(self, seconds: float, srt: bool = True) -> str:
         """Format timestamp for SRT/VTT files."""
