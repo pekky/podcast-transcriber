@@ -16,6 +16,7 @@ from typing import Optional, List, Dict, Tuple
 import warnings
 import numpy as np
 import re
+import shutil
 
 # Suppress some warnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -144,6 +145,243 @@ class AudioTranscriber:
             self.enable_diarization = False
             self.diarization_pipeline = None
     
+    def get_file_size_mb(self, file_path: Path) -> float:
+        """
+        Get file size in MB.
+        
+        Args:
+            file_path: Path to the file
+            
+        Returns:
+            File size in MB
+        """
+        return file_path.stat().st_size / (1024 * 1024)
+    
+    def split_large_audio(self, audio_path: Path, segment_minutes: int = 5, max_size_mb: int = 10) -> List[Path]:
+        """
+        Split large audio files into smaller segments.
+        
+        Args:
+            audio_path: Input audio file path
+            segment_minutes: Length of each segment in minutes
+            max_size_mb: Maximum file size in MB before splitting
+            
+        Returns:
+            List of segment file paths (original file if not split)
+        """
+        if not PYDUB_AVAILABLE:
+            print("⚠️  pydub not available. Cannot split large files.")
+            return [audio_path]
+        
+        file_size_mb = self.get_file_size_mb(audio_path)
+        
+        if file_size_mb <= max_size_mb:
+            print(f"📊 File size: {file_size_mb:.1f}MB (no splitting needed)")
+            return [audio_path]
+        
+        print(f"📊 File size: {file_size_mb:.1f}MB (splitting into {segment_minutes}-minute segments)")
+        
+        try:
+            # Load audio
+            audio = AudioSegment.from_file(str(audio_path))
+            
+            # Calculate segment length in milliseconds
+            segment_ms = segment_minutes * 60 * 1000
+            
+            # Create segments directory
+            segments_dir = audio_path.parent / f"{audio_path.stem}_segments"
+            segments_dir.mkdir(exist_ok=True)
+            
+            segments = []
+            total_segments = len(audio) // segment_ms + (1 if len(audio) % segment_ms else 0)
+            
+            print(f"🔪 Splitting into {total_segments} segments...")
+            
+            for i in range(0, len(audio), segment_ms):
+                segment = audio[i:i + segment_ms]
+                segment_num = (i // segment_ms) + 1
+                segment_filename = f"{audio_path.stem}_part{segment_num:03d}{audio_path.suffix}"
+                segment_path = segments_dir / segment_filename
+                
+                # Export segment
+                segment.export(str(segment_path), format=audio_path.suffix[1:])
+                segments.append(segment_path)
+                
+                print(f"   📁 Created: {segment_filename} ({len(segment)/1000:.1f}s)")
+            
+            print(f"✅ Audio split into {len(segments)} segments in: {segments_dir}")
+            return segments
+            
+        except Exception as e:
+            print(f"❌ Failed to split audio: {e}")
+            return [audio_path]
+    
+    def merge_transcripts(self, transcript_paths: List[Path], original_filename: str, 
+                         output_dir: Path, format: str = "txt") -> Path:
+        """
+        Merge multiple transcript files from audio segments.
+        
+        Args:
+            transcript_paths: List of transcript file paths
+            original_filename: Original audio filename (without extension)
+            output_dir: Output directory
+            format: Output format
+            
+        Returns:
+            Path to merged transcript file
+        """
+        merged_filename = f"{original_filename}_merged.{format}"
+        merged_path = output_dir / merged_filename
+        
+        print(f"📋 Merging {len(transcript_paths)} transcripts...")
+        
+        if format == "txt":
+            with open(merged_path, 'w', encoding='utf-8') as merged_file:
+                for i, transcript_path in enumerate(transcript_paths):
+                    if transcript_path.exists():
+                        with open(transcript_path, 'r', encoding='utf-8') as f:
+                            content = f.read().strip()
+                            if content:
+                                if i > 0:
+                                    merged_file.write("\n\n")
+                                merged_file.write(content)
+                            
+        elif format in ["srt", "vtt"]:
+            # For subtitle formats, we need to adjust timestamps
+            self._merge_subtitle_files(transcript_paths, merged_path, format)
+            
+        elif format == "json":
+            # Merge JSON transcripts
+            self._merge_json_files(transcript_paths, merged_path)
+        
+        print(f"✅ Merged transcript saved: {merged_path}")
+        return merged_path
+    
+    def _merge_subtitle_files(self, transcript_paths: List[Path], output_path: Path, format: str):
+        """Merge SRT or VTT files with proper timestamp adjustment."""
+        segment_counter = 1
+        total_offset = 0.0
+        
+        with open(output_path, 'w', encoding='utf-8') as merged_file:
+            if format == "vtt":
+                merged_file.write("WEBVTT\n\n")
+            
+            for segment_idx, transcript_path in enumerate(transcript_paths):
+                if not transcript_path.exists():
+                    continue
+                
+                with open(transcript_path, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                
+                i = 0
+                if format == "vtt" and lines and lines[0].startswith("WEBVTT"):
+                    i = 2  # Skip WEBVTT header
+                
+                while i < len(lines):
+                    line = lines[i].strip()
+                    
+                    if not line:
+                        i += 1
+                        continue
+                    
+                    if format == "srt" and line.isdigit():
+                        # SRT subtitle number
+                        merged_file.write(f"{segment_counter}\n")
+                        segment_counter += 1
+                        i += 1
+                    elif "-->" in line:
+                        # Timestamp line - adjust timestamps
+                        adjusted_line = self._adjust_timestamps(line, total_offset)
+                        merged_file.write(adjusted_line + "\n")
+                        i += 1
+                    else:
+                        # Text line
+                        merged_file.write(line + "\n")
+                        i += 1
+                
+                # Update offset for next segment (5 minutes in seconds)
+                total_offset += 5 * 60
+                merged_file.write("\n")
+    
+    def _merge_json_files(self, transcript_paths: List[Path], output_path: Path):
+        """Merge JSON transcript files."""
+        merged_result = {
+            "text": "",
+            "segments": [],
+            "language": None
+        }
+        
+        total_offset = 0.0
+        
+        for transcript_path in transcript_paths:
+            if not transcript_path.exists():
+                continue
+            
+            with open(transcript_path, 'r', encoding='utf-8') as f:
+                segment_result = json.load(f)
+            
+            # Append text
+            if merged_result["text"]:
+                merged_result["text"] += " "
+            merged_result["text"] += segment_result.get("text", "")
+            
+            # Adjust and append segments
+            for segment in segment_result.get("segments", []):
+                adjusted_segment = segment.copy()
+                adjusted_segment["start"] += total_offset
+                adjusted_segment["end"] += total_offset
+                merged_result["segments"].append(adjusted_segment)
+            
+            # Set language from first segment
+            if merged_result["language"] is None:
+                merged_result["language"] = segment_result.get("language")
+            
+            total_offset += 5 * 60  # 5 minutes
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(merged_result, f, indent=2, ensure_ascii=False)
+    
+    def _adjust_timestamps(self, timestamp_line: str, offset_seconds: float) -> str:
+        """Adjust timestamps in SRT/VTT format by adding offset."""
+        # Parse timestamps like "00:01:23,456 --> 00:01:25,789"
+        parts = timestamp_line.split(" --> ")
+        if len(parts) != 2:
+            return timestamp_line
+        
+        start_ts = self._parse_timestamp(parts[0].strip())
+        end_ts = self._parse_timestamp(parts[1].strip())
+        
+        if start_ts is None or end_ts is None:
+            return timestamp_line
+        
+        # Add offset
+        start_ts += offset_seconds
+        end_ts += offset_seconds
+        
+        # Format back to timestamp string
+        start_formatted = self._format_timestamp(start_ts, srt="," in parts[0])
+        end_formatted = self._format_timestamp(end_ts, srt="," in parts[1])
+        
+        return f"{start_formatted} --> {end_formatted}"
+    
+    def _parse_timestamp(self, timestamp_str: str) -> Optional[float]:
+        """Parse SRT/VTT timestamp to seconds."""
+        try:
+            # Handle both SRT (comma) and VTT (dot) formats
+            timestamp_str = timestamp_str.replace(',', '.')
+            
+            parts = timestamp_str.split(':')
+            if len(parts) != 3:
+                return None
+            
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            seconds = float(parts[2])
+            
+            return hours * 3600 + minutes * 60 + seconds
+        except:
+            return None
+
     def preprocess_audio(self, audio_path: Path, output_path: Optional[Path] = None) -> Path:
         """
         Preprocess audio file for better transcription.
@@ -468,9 +706,10 @@ class AudioTranscriber:
     
     def transcribe_file(self, input_path: Path, output_dir: Optional[Path] = None, 
                        format: str = "txt", language: Optional[str] = None,
-                       preprocess: bool = True, enable_diarization: Optional[bool] = None) -> Path:
+                       preprocess: bool = True, enable_diarization: Optional[bool] = None,
+                       max_size_mb: int = 10, segment_minutes: int = 5) -> Path:
         """
-        Complete transcription workflow for a single file.
+        Complete transcription workflow for a single file with automatic splitting for large files.
         
         Args:
             input_path: Input audio file path
@@ -479,6 +718,8 @@ class AudioTranscriber:
             language: Language code
             preprocess: Whether to preprocess audio
             enable_diarization: Override diarization setting for this file
+            max_size_mb: Maximum file size in MB before splitting
+            segment_minutes: Length of each segment in minutes when splitting
             
         Returns:
             Path to transcript file
@@ -488,7 +729,6 @@ class AudioTranscriber:
         
         output_dir = Path(output_dir)
         suffix = "_speakers" if (enable_diarization if enable_diarization is not None else self.enable_diarization) else ""
-        output_file = output_dir / f"{input_path.stem}{suffix}.{format}"
         
         # Temporarily override diarization setting if specified
         original_diarization = self.enable_diarization
@@ -496,29 +736,83 @@ class AudioTranscriber:
             self.enable_diarization = enable_diarization and PYANNOTE_AVAILABLE
         
         try:
-            # Preprocess if needed
-            if preprocess and PYDUB_AVAILABLE:
-                processed_path = self.preprocess_audio(input_path)
-                transcribe_path = processed_path
+            # Step 1: Check if file needs splitting
+            segments = self.split_large_audio(input_path, segment_minutes, max_size_mb)
+            
+            if len(segments) == 1:
+                # Single file, use original workflow
+                output_file = output_dir / f"{input_path.stem}{suffix}.{format}"
+                
+                # Preprocess if needed
+                if preprocess and PYDUB_AVAILABLE:
+                    processed_path = self.preprocess_audio(input_path)
+                    transcribe_path = processed_path
+                else:
+                    transcribe_path = input_path
+                
+                # Transcribe with speaker diarization
+                result = self.transcribe_audio(transcribe_path, language)
+                
+                # Save transcript
+                self.save_transcript(result, output_file, format)
+                
+                # Clean up processed file if it was created
+                if preprocess and transcribe_path != input_path and transcribe_path.exists():
+                    transcribe_path.unlink()
+                    print("🧹 Cleaned up temporary processed file")
+                
+                return output_file
+            
             else:
-                transcribe_path = input_path
-            
-            # Transcribe with speaker diarization
-            result = self.transcribe_audio(transcribe_path, language)
-            
-            # Save transcript
-            self.save_transcript(result, output_file, format)
-            
-            # Clean up processed file if it was created
-            if preprocess and transcribe_path != input_path and transcribe_path.exists():
-                transcribe_path.unlink()
-                print("🧹 Cleaned up temporary processed file")
+                # Multiple segments, transcribe each and merge
+                print(f"🔄 Transcribing {len(segments)} segments...")
+                
+                transcript_paths = []
+                cleanup_paths = []
+                
+                for i, segment_path in enumerate(segments, 1):
+                    print(f"\n[{i}/{len(segments)}] Processing: {segment_path.name}")
+                    
+                    # Preprocess if needed
+                    if preprocess and PYDUB_AVAILABLE:
+                        processed_path = self.preprocess_audio(segment_path)
+                        transcribe_path = processed_path
+                        if processed_path != segment_path:
+                            cleanup_paths.append(processed_path)
+                    else:
+                        transcribe_path = segment_path
+                    
+                    # Transcribe segment
+                    result = self.transcribe_audio(transcribe_path, language)
+                    
+                    # Save segment transcript
+                    segment_output = segment_path.parent / f"{segment_path.stem}{suffix}.{format}"
+                    self.save_transcript(result, segment_output, format)
+                    transcript_paths.append(segment_output)
+                
+                # Merge all transcripts
+                merged_output = self.merge_transcripts(
+                    transcript_paths, 
+                    input_path.stem, 
+                    output_dir, 
+                    format
+                )
+                
+                # Clean up temporary files
+                for cleanup_path in cleanup_paths:
+                    if cleanup_path.exists():
+                        cleanup_path.unlink()
+                
+                # Optionally clean up segment files
+                segments_dir = segments[0].parent
+                print(f"🧹 Segment files available in: {segments_dir}")
+                print(f"🧹 Individual transcripts available in: {segments_dir}")
+                
+                return merged_output
         
         finally:
             # Restore original diarization setting
             self.enable_diarization = original_diarization
-        
-        return output_file
 
 
 def main():
@@ -541,6 +835,10 @@ def main():
                        help='Disable speaker diarization (identification)')
     parser.add_argument('--device', choices=['auto', 'cpu', 'cuda'], default='auto',
                        help='Device to use (default: auto)')
+    parser.add_argument('--max-size', type=int, default=10,
+                       help='Maximum file size in MB before splitting (default: 10)')
+    parser.add_argument('--segment-minutes', type=int, default=5,
+                       help='Length of each segment in minutes when splitting (default: 5)')
     
     args = parser.parse_args()
     
@@ -568,7 +866,9 @@ def main():
                 args.format,
                 args.language,
                 not args.no_preprocess,
-                enable_diarization
+                enable_diarization,
+                args.max_size,
+                args.segment_minutes
             )
             print(f"🎉 Transcription complete: {output_file}")
             
@@ -597,7 +897,9 @@ def main():
                     args.format,
                     args.language,
                     not args.no_preprocess,
-                    enable_diarization
+                    enable_diarization,
+                    args.max_size,
+                    args.segment_minutes
                 )
                 print(f"✅ Completed: {output_file}")
                 
