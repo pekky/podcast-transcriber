@@ -17,6 +17,7 @@ import warnings
 import numpy as np
 import re
 import shutil
+import glob
 
 # Suppress some warnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -813,16 +814,160 @@ class AudioTranscriber:
         finally:
             # Restore original diarization setting
             self.enable_diarization = original_diarization
+    
+    def list_audio_files(self, directory: Path = None) -> List[Path]:
+        """
+        List all audio files in the specified directory.
+        
+        Args:
+            directory: Directory to search (default: downloads)
+            
+        Returns:
+            List of audio file paths
+        """
+        if directory is None:
+            directory = Path("downloads")
+        
+        if not directory.exists():
+            return []
+        
+        # Supported audio extensions
+        audio_extensions = ['.mp3', '.m4a', '.wav', '.flac', '.ogg', '.aac', '.wma']
+        audio_files = []
+        
+        for ext in audio_extensions:
+            pattern = str(directory / f"*{ext}")
+            audio_files.extend([Path(f) for f in glob.glob(pattern, recursive=False)])
+            # Also check uppercase extensions
+            pattern = str(directory / f"*{ext.upper()}")
+            audio_files.extend([Path(f) for f in glob.glob(pattern, recursive=False)])
+        
+        # Remove duplicates and sort
+        audio_files = list(set(audio_files))
+        audio_files.sort(key=lambda x: x.name.lower())
+        
+        return audio_files
+    
+    def display_file_menu(self, audio_files: List[Path]) -> int:
+        """
+        Display interactive menu for file selection.
+        
+        Args:
+            audio_files: List of audio files
+            
+        Returns:
+            Selected file index (0-based) or -1 for exit
+        """
+        print("\n📁 在 downloads 目录下找到以下音频文件:")
+        print("=" * 60)
+        
+        for i, file_path in enumerate(audio_files, 1):
+            file_size = self.get_file_size_mb(file_path)
+            duration_info = self._get_duration_info(file_path)
+            
+            print(f"{i:2d}. {file_path.name}")
+            print(f"    大小: {file_size:.1f} MB{duration_info}")
+            print(f"    路径: {file_path}")
+            print()
+        
+        print("0. 退出")
+        print("=" * 60)
+        
+        while True:
+            try:
+                choice = input("请选择要转录的文件 (输入编号): ").strip()
+                
+                if choice == '0':
+                    return -1
+                
+                index = int(choice) - 1
+                if 0 <= index < len(audio_files):
+                    return index
+                else:
+                    print(f"❌ 请输入有效编号 (0-{len(audio_files)})")
+                    
+            except ValueError:
+                print("❌ 请输入数字编号")
+            except KeyboardInterrupt:
+                print("\n\n👋 退出程序")
+                return -1
+    
+    def _get_duration_info(self, file_path: Path) -> str:
+        """
+        Get audio file duration information.
+        
+        Args:
+            file_path: Path to audio file
+            
+        Returns:
+            Duration info string
+        """
+        if not PYDUB_AVAILABLE:
+            return ""
+        
+        try:
+            audio = AudioSegment.from_file(str(file_path))
+            duration_seconds = len(audio) / 1000
+            
+            if duration_seconds < 60:
+                return f", 时长: {duration_seconds:.0f}秒"
+            elif duration_seconds < 3600:
+                minutes = duration_seconds / 60
+                return f", 时长: {minutes:.1f}分钟"
+            else:
+                hours = duration_seconds / 3600
+                return f", 时长: {hours:.1f}小时"
+                
+        except Exception:
+            return ""
+    
+    def select_audio_file_interactively(self, directory: Path = None) -> Optional[Path]:
+        """
+        Interactive audio file selection from downloads directory.
+        
+        Args:
+            directory: Directory to search (default: downloads)
+            
+        Returns:
+            Selected file path or None if cancelled
+        """
+        if directory is None:
+            directory = Path("downloads")
+        
+        # Check if downloads directory exists
+        if not directory.exists():
+            print(f"❌ 目录不存在: {directory}")
+            print(f"💡 请先使用 podcast_downloader.py 下载一些音频文件")
+            return None
+        
+        # List audio files
+        audio_files = self.list_audio_files(directory)
+        
+        if not audio_files:
+            print(f"❌ 在 {directory} 目录下未找到音频文件")
+            print(f"💡 支持的格式: MP3, M4A, WAV, FLAC, OGG, AAC, WMA")
+            print(f"💡 请先使用 podcast_downloader.py 下载一些音频文件")
+            return None
+        
+        # Display menu and get selection
+        selected_index = self.display_file_menu(audio_files)
+        
+        if selected_index == -1:
+            return None
+        
+        selected_file = audio_files[selected_index]
+        print(f"\n✅ 已选择: {selected_file.name}")
+        return selected_file
 
 
 def main():
     parser = argparse.ArgumentParser(
         description='Transcribe audio files to text using Whisper with speaker identification',
-        epilog='Supported formats: MP3, WAV, M4A, FLAC, OGG, AAC, WMA\n'
+        epilog='Supported formats: MP3, M4A, WAV, FLAC, OGG, AAC, WMA\n'
                'Speaker identification helps separate different speakers in conversations.'
     )
     
-    parser.add_argument('input', help='Input audio file or directory')
+    parser.add_argument('input', nargs='?', help='Input audio file or directory')
     parser.add_argument('-o', '--output', help='Output directory (default: same as input)')
     parser.add_argument('-f', '--format', choices=['txt', 'srt', 'vtt', 'json'], 
                        default='txt', help='Output format (default: txt)')
@@ -842,12 +987,6 @@ def main():
     
     args = parser.parse_args()
     
-    input_path = Path(args.input)
-    
-    if not input_path.exists():
-        print(f"❌ Input file not found: {input_path}")
-        sys.exit(1)
-    
     # Initialize transcriber
     enable_diarization = not args.no_diarization
     transcriber = AudioTranscriber(
@@ -856,10 +995,32 @@ def main():
         enable_diarization=enable_diarization
     )
     
+    # Determine input file
+    if args.input:
+        # File provided via command line
+        input_path = Path(args.input)
+        
+        if not input_path.exists():
+            print(f"❌ Input file not found: {input_path}")
+            sys.exit(1)
+    else:
+        # Interactive mode - select from downloads directory
+        print("🎙️ 音频转录工具")
+        print("支持格式: MP3, M4A, WAV, FLAC, OGG, AAC, WMA")
+        print("支持说话人识别功能，可区分对话中的不同说话者")
+        
+        selected_file = transcriber.select_audio_file_interactively()
+        if not selected_file:
+            print("\n👋 未选择文件，程序退出")
+            sys.exit(0)
+        
+        input_path = selected_file
+    
     # Process files
     if input_path.is_file():
         # Single file
         try:
+            print(f"\n🎤 开始转录: {input_path.name}")
             output_file = transcriber.transcribe_file(
                 input_path,
                 Path(args.output) if args.output else None,
@@ -870,15 +1031,15 @@ def main():
                 args.max_size,
                 args.segment_minutes
             )
-            print(f"🎉 Transcription complete: {output_file}")
+            print(f"\n🎉 转录完成: {output_file}")
             
         except Exception as e:
             print(f"❌ Error processing {input_path}: {e}")
             sys.exit(1)
     
     elif input_path.is_dir():
-        # Directory
-        audio_extensions = {'.mp3', '.wav', '.m4a', '.flac', '.ogg', '.aac', '.wma'}
+        # Directory processing
+        audio_extensions = {'.mp3', '.m4a', '.wav', '.flac', '.ogg', '.aac', '.wma'}
         audio_files = [f for f in input_path.iterdir() 
                       if f.suffix.lower() in audio_extensions]
         
@@ -889,7 +1050,7 @@ def main():
         print(f"📁 Found {len(audio_files)} audio file(s)")
         
         for i, audio_file in enumerate(audio_files, 1):
-            print(f"\n[{i}/{len(audio_files)}]")
+            print(f"\n[{i}/{len(audio_files)}] Processing: {audio_file.name}")
             try:
                 output_file = transcriber.transcribe_file(
                     audio_file,

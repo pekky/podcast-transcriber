@@ -17,6 +17,16 @@ import argparse
 import re
 import json
 import time
+import urllib.request
+from urllib.error import URLError, HTTPError
+
+try:
+    import yt_dlp
+    YTDLP_AVAILABLE = True
+except ImportError:
+    YTDLP_AVAILABLE = False
+    print("⚠️  yt-dlp not available. YouTube downloading will be disabled.")
+    print("Install with: pip install yt-dlp")
 
 
 class PodcastDownloader:
@@ -35,7 +45,49 @@ class PodcastDownloader:
         parsed = urllib.parse.urlparse(url)
         return any(parsed.path.lower().endswith(ext) for ext in audio_extensions)
 
-    def download_audio_file(self, url: str, filename: Optional[str] = None) -> bool:
+    def is_valid_url(self, url: str) -> bool:
+        """Check if URL is valid and reachable."""
+        try:
+            # Basic URL format check
+            parsed = urllib.parse.urlparse(url)
+            if not all([parsed.scheme, parsed.netloc]):
+                return False
+            
+            # Try to access the URL (head request to avoid downloading)
+            response = self.session.head(url, allow_redirects=True, timeout=10)
+            return response.status_code < 400
+        except Exception:
+            return False
+
+    def get_original_filename(self, url: str) -> str:
+        """Extract original filename from URL."""
+        parsed_url = urllib.parse.urlparse(url)
+        filename = os.path.basename(parsed_url.path) or "podcast_audio"
+        
+        # Remove extension to get base name
+        if '.' in filename:
+            base_name = os.path.splitext(filename)[0]
+        else:
+            base_name = filename
+            
+        return base_name
+
+    def get_custom_filename(self, original_filename: str) -> str:
+        """Prompt user for custom filename with original as default."""
+        while True:
+            custom_name = input(f"请输入保存的文件名 (默认: {original_filename}): ").strip()
+            
+            if not custom_name:
+                return original_filename
+            
+            # Clean filename to avoid filesystem issues
+            clean_name = "".join(c for c in custom_name if c.isalnum() or c in (' ', '-', '_', '.')).strip()
+            if clean_name:
+                return clean_name
+            else:
+                print("✗ 文件名无效，请重新输入")
+
+    def download_audio_file(self, url: str, filename: Optional[str] = None, ask_filename: bool = True) -> bool:
         """Download audio file from direct URL."""
         try:
             # Handle potential authentication requirements
@@ -54,8 +106,12 @@ class PodcastDownloader:
             response.raise_for_status()
             
             if not filename:
-                parsed_url = urllib.parse.urlparse(url)
-                filename = os.path.basename(parsed_url.path) or "podcast_audio.mp3"
+                original_filename = self.get_original_filename(url)
+                if ask_filename:
+                    base_filename = self.get_custom_filename(original_filename)
+                else:
+                    base_filename = original_filename
+                filename = base_filename
             
             # Ensure filename has an extension
             if '.' not in filename:
@@ -121,6 +177,11 @@ class PodcastDownloader:
     def is_apple_podcast_url(self, url: str) -> bool:
         """Check if URL is from Apple Podcasts."""
         return 'podcasts.apple.com' in url
+    
+    def is_youtube_url(self, url: str) -> bool:
+        """Check if URL is from YouTube."""
+        youtube_domains = ['youtube.com', 'youtu.be', 'm.youtube.com', 'www.youtube.com']
+        return any(domain in url.lower() for domain in youtube_domains)
     
     def extract_podcast_id(self, apple_url: str) -> Optional[str]:
         """Extract podcast ID from Apple Podcasts URL."""
@@ -192,7 +253,7 @@ class PodcastDownloader:
         # Download episodes (limited by max_episodes)
         for i, episode in enumerate(episodes[:max_episodes]):
             print(f"\n[{i+1}/{min(max_episodes, len(episodes))}]")
-            if self.download_audio_file(episode['url'], episode['filename']):
+            if self.download_audio_file(episode['url'], episode['filename'], ask_filename=False):
                 success_count += 1
             
             # Add delay between downloads to be respectful
@@ -202,6 +263,70 @@ class PodcastDownloader:
         print(f"\n✓ Successfully downloaded {success_count}/{min(max_episodes, len(episodes))} episodes")
         return success_count > 0
     
+    def download_youtube_audio(self, url: str) -> bool:
+        """Download audio from YouTube video."""
+        if not YTDLP_AVAILABLE:
+            print("❌ yt-dlp not installed. Cannot download from YouTube.")
+            print("Install with: pip install yt-dlp")
+            return False
+        
+        try:
+            print("🎬 Processing YouTube URL...")
+            
+            # Configure yt-dlp options (download audio without conversion to avoid ffmpeg dependency)
+            ydl_opts = {
+                'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
+                'outtmpl': str(self.output_dir / '%(title)s.%(ext)s'),
+                'quiet': False,
+                'no_warnings': False,
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # Get video info first
+                info = ydl.extract_info(url, download=False)
+                title = info.get('title', 'Unknown')
+                duration = info.get('duration', 0)
+                
+                print(f"📹 Title: {title}")
+                if duration:
+                    mins, secs = divmod(duration, 60)
+                    print(f"⏱️  Duration: {mins}m {secs}s")
+                
+                # Download the audio
+                print("⬇️  Downloading audio...")
+                ydl.download([url])
+                
+                print(f"✅ Successfully downloaded: {title}")
+                return True
+                
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "private" in error_msg or "unavailable" in error_msg:
+                print(f"❌ Video is private or unavailable: {e}")
+            elif "copyright" in error_msg:
+                print(f"❌ Copyright restriction: {e}")
+            elif "region" in error_msg or "country" in error_msg:
+                print(f"❌ Geographic restriction: {e}")
+            else:
+                print(f"❌ Error downloading from YouTube: {e}")
+            return False
+    
+    def get_url_with_validation(self) -> str:
+        """Prompt user for URL with validation and retry."""
+        while True:
+            url = input("请输入下载链接: ").strip()
+            
+            if not url:
+                print("✗ 链接不能为空，请重新输入")
+                continue
+            
+            print("🔍 验证链接中...")
+            if self.is_valid_url(url):
+                return url
+            else:
+                print("✗ 链接无效或无法访问，请检查后重新输入")
+                print("💡 确保链接格式正确且网络连接正常")
+
     def download_from_url(self, url: str, max_episodes: int = 1) -> None:
         """Download podcast(s) from URL."""
         print(f"Processing URL: {url}")
@@ -215,6 +340,12 @@ class PodcastDownloader:
             if not success:
                 print("\n💡 Tip: Make sure the Apple Podcasts URL contains a podcast ID (e.g., id123456789)")
                 print("💡 Some podcasts may have restricted access or require subscription.")
+        elif self.is_youtube_url(url):
+            # YouTube URL
+            success = self.download_youtube_audio(url)
+            if not success:
+                print("\n💡 Tip: Make sure the YouTube video is public and not restricted.")
+                print("💡 Some videos may have copyright or geographic restrictions.")
         else:
             # Try to parse as RSS feed
             self.download_from_rss(url, max_episodes)
@@ -223,10 +354,10 @@ class PodcastDownloader:
 def main():
     parser = argparse.ArgumentParser(
         description='Download podcast audio files',
-        epilog='Supports RSS feeds, direct audio URLs, and Apple Podcasts URLs.\n'
-               'Note: Some Apple Podcasts content may require subscription or have access restrictions.'
+        epilog='Supports RSS feeds, direct audio URLs, Apple Podcasts URLs, and YouTube videos.\n'
+               'Note: Some content may require subscription or have access restrictions.'
     )
-    parser.add_argument('url', help='Podcast URL (RSS feed, Apple Podcasts, or direct audio file)')
+    parser.add_argument('url', nargs='?', help='Podcast URL (RSS feed, Apple Podcasts, or direct audio file)')
     parser.add_argument('-o', '--output', default='downloads', 
                        help='Output directory (default: downloads)')
     parser.add_argument('-n', '--max-episodes', type=int, default=1,
@@ -260,7 +391,16 @@ def main():
         except Exception as e:
             print(f"⚠️ Could not parse headers: {e}")
     
-    downloader.download_from_url(args.url, args.max_episodes)
+    # Get URL from argument or prompt user
+    if args.url:
+        url = args.url
+    else:
+        print("🎧 Podcast Audio Downloader")
+        print("支持下载 RSS 订阅源、直接音频链接、Apple Podcasts 和 YouTube 视频")
+        print()
+        url = downloader.get_url_with_validation()
+    
+    downloader.download_from_url(url, args.max_episodes)
 
 
 if __name__ == "__main__":
