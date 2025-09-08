@@ -127,3 +127,13 @@ Icon?
 .Trashes
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
+
+# Binary executables (should be installed separately)
+ffmpeg
+ffprobe
+
+# Web application uploads and static files
+static/uploads/
+
+# Debug files
+debug_*.html
