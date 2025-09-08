@@ -4,10 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Python-based podcast transcriber and downloader toolkit with two main components:
+This is a Python-based podcast transcriber and downloader toolkit with three main components:
 
 1. **Podcast Downloader** (`podcast_downloader.py`): Downloads podcasts from Apple Podcasts URLs, RSS feeds, and direct audio links
 2. **Audio Transcriber** (`audio_transcriber.py`): Transcribes audio using OpenAI Whisper with optional speaker diarization via pyannote.audio
+3. **Vocabulary Analyzer** (`vocabulary_analyzer.py`): Extracts and analyzes vocabulary from transcripts to create study guides for English learners
 
 ## Key Architecture
 
@@ -38,6 +39,10 @@ python3 audio_transcriber.py "audio.mp3"
 # Transcribe to different formats
 python3 audio_transcriber.py -f srt "audio.mp3"
 python3 audio_transcriber.py -f json --no-diarization "audio.mp3"
+
+# Vocabulary analysis from transcripts
+python3 vocabulary_analyzer.py "downloads/transcript_speakers.txt"
+python3 vocabulary_analyzer.py "transcript.txt" -l "6.0-6.5" -m 25
 ```
 
 ### Testing Authentication

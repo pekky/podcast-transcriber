@@ -508,28 +508,68 @@ class AudioTranscriber:
     
     def _assign_generic_speakers(self, transcription: Dict) -> Dict:
         """
-        Assign generic speakers (A, B, C) based on pauses and voice changes.
-        This is a simple heuristic when diarization is not available.
+        Assign generic speakers based on pauses, creating natural segments for better readability.
+        When speaker diarization is disabled, this creates paragraph-like breaks at speaking pauses.
         """
         enhanced_segments = []
-        current_speaker = 'A'
+        current_speaker = 'Speaker'
         last_end = 0
+        segment_group = []
         
+        # Group segments by pauses for better readability
         for i, segment in enumerate(transcription['segments']):
-            # If there's a significant pause (>2 seconds), possibly change speaker
-            if segment['start'] - last_end > 2.0 and i > 0:
-                # Simple alternation between A and B
-                current_speaker = 'B' if current_speaker == 'A' else 'A'
+            pause_duration = segment['start'] - last_end if i > 0 else 0
             
+            # Detect natural speaking breaks (pauses longer than 1.5 seconds)
+            is_new_paragraph = (pause_duration > 1.5 and i > 0)
+            
+            # Also break on sentence endings followed by pauses
+            if i > 0 and pause_duration > 0.8:
+                prev_text = transcription['segments'][i-1]['text'].strip()
+                if any(prev_text.endswith(punct) for punct in ['.', '!', '?', '。', '！', '？']):
+                    is_new_paragraph = True
+            
+            if is_new_paragraph and segment_group:
+                # Create a merged segment from the group
+                merged_segment = self._merge_segment_group(segment_group, current_speaker)
+                enhanced_segments.append(merged_segment)
+                segment_group = []
+            
+            # Add current segment to group
             enhanced_segment = segment.copy()
             enhanced_segment['speaker'] = current_speaker
-            enhanced_segments.append(enhanced_segment)
+            segment_group.append(enhanced_segment)
             
             last_end = segment['end']
+        
+        # Add the last group
+        if segment_group:
+            merged_segment = self._merge_segment_group(segment_group, current_speaker)
+            enhanced_segments.append(merged_segment)
         
         result = transcription.copy()
         result['segments'] = enhanced_segments
         return result
+    
+    def _merge_segment_group(self, segments: List[Dict], speaker: str) -> Dict:
+        """
+        Merge a group of segments into a single paragraph-like segment.
+        """
+        if not segments:
+            return {}
+        
+        if len(segments) == 1:
+            return segments[0]
+        
+        # Merge the segments
+        merged_text = ' '.join(seg['text'].strip() for seg in segments if seg['text'].strip())
+        
+        return {
+            'start': segments[0]['start'],
+            'end': segments[-1]['end'], 
+            'text': merged_text,
+            'speaker': speaker
+        }
     
     def _get_speaker_mapping(self, speakers_timeline: List[Dict]) -> Dict[str, str]:
         """

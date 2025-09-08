@@ -1,0 +1,285 @@
+/* Podcast Transcriber Web App Styles */
+
+/* 全局样式 */
+body {
+    background-color: #f8f9fa;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* 头部样式 */
+header {
+    background: linear-gradient(135deg, #007bff, #0056b3) !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+/* 卡片样式 */
+.card {
+    border: none;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+    transition: transform 0.2s ease-in-out;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+.card-header {
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    font-weight: 600;
+}
+
+/* 按钮样式 */
+.btn {
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.2s ease-in-out;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    border: none;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #0056b3, #004085);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #28a745, #1e7e34);
+    border: none;
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #1e7e34, #155724);
+}
+
+/* 输入框样式 */
+.form-control {
+    border-radius: 8px;
+    border: 1px solid #e0e6ed;
+    transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.1);
+}
+
+/* 进度条样式 */
+.progress {
+    height: 8px;
+    border-radius: 10px;
+    background-color: #e9ecef;
+}
+
+.progress-bar {
+    border-radius: 10px;
+    background: linear-gradient(90deg, #007bff, #28a745);
+    transition: width 0.3s ease;
+}
+
+/* 警告框样式 */
+.alert {
+    border: none;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+.alert-info {
+    background: linear-gradient(135deg, #d1ecf1, #bee5eb);
+    color: #0c5460;
+}
+
+.alert-success {
+    background: linear-gradient(135deg, #d4edda, #c3e6cb);
+    color: #155724;
+}
+
+.alert-danger {
+    background: linear-gradient(135deg, #f8d7da, #f5c6cb);
+    color: #721c24;
+}
+
+/* 转录文本区域 */
+.transcript-text {
+    background-color: #ffffff !important;
+    border: 2px solid #e9ecef;
+    transition: border-color 0.2s ease;
+}
+
+.transcript-text:hover {
+    border-color: #007bff;
+}
+
+.transcript-text pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: #333;
+    line-height: 1.8;
+}
+
+/* 空状态样式 */
+#emptyState {
+    min-height: 400px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Toast 样式 */
+.toast {
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+
+/* 动画效果 */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+    from { opacity: 0; transform: translateX(-20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-out;
+}
+
+.slide-in {
+    animation: slideIn 0.3s ease-out;
+}
+
+/* 加载动画 */
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .container-fluid {
+        padding: 0 15px;
+    }
+    
+    header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .card {
+        margin-bottom: 20px;
+    }
+    
+    .transcript-text {
+        height: 400px !important;
+    }
+}
+
+/* 状态指示器 */
+.status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.status-indicator.downloading {
+    background-color: #ffc107;
+    animation: pulse 2s infinite;
+}
+
+.status-indicator.transcribing {
+    background-color: #17a2b8;
+    animation: pulse 2s infinite;
+}
+
+.status-indicator.completed {
+    background-color: #28a745;
+}
+
+.status-indicator.error {
+    background-color: #dc3545;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* 文本高亮 */
+.highlight {
+    background-color: #fff3cd;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+/* 滚动条样式 */
+.transcript-text::-webkit-scrollbar {
+    width: 8px;
+}
+
+.transcript-text::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+.transcript-text::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 10px;
+}
+
+.transcript-text::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* 说话人标识样式 */
+.speaker-label {
+    color: #007bff;
+    font-weight: 600;
+    margin-top: 15px;
+    margin-bottom: 5px;
+    font-size: 0.9em;
+}
+
+.speaker-label:first-child {
+    margin-top: 0;
+}
+
+/* 时间戳样式 */
+.timestamp {
+    color: #6c757d;
+    font-size: 0.8em;
+    margin-left: 8px;
+}
+
+/* 成功状态样式 */
+.success-state {
+    color: #28a745;
+    font-weight: 500;
+}
+
+/* 错误状态样式 */
+.error-state {
+    color: #dc3545;
+    font-weight: 500;
+}
