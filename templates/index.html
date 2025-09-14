@@ -96,6 +96,19 @@
                         </h5>
                     </div>
                     <div class="card-body">
+                        <!-- 音频文件选择器 -->
+                        <div class="mb-3">
+                            <label for="audioSelector" class="form-label">
+                                <i class="fas fa-music me-1"></i>选择音频文件
+                            </label>
+                            <select class="form-select" id="audioSelector">
+                                <option value="">正在加载音频文件...</option>
+                            </select>
+                            <div class="form-text">
+                                选择已下载的音频文件进行转录
+                            </div>
+                        </div>
+
                         <!-- 转录选项 -->
                         <div class="mb-3">
                             <div class="form-check">
@@ -190,6 +203,49 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 重新转录确认对话框 -->
+    <div class="modal fade" id="retranscribeModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title">
+                        <i class="fas fa-exclamation-triangle me-2"></i>确认重新转录
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">检测到此音频文件已经转录过了：</p>
+                    <div class="alert alert-info">
+                        <small>
+                            <i class="fas fa-file-alt me-1"></i>
+                            <strong>转录时间：</strong><span id="existingTranscriptTime"></span><br>
+                            <i class="fas fa-music me-1"></i>
+                            <strong>音频文件：</strong><span id="existingAudioFile"></span>
+                        </small>
+                    </div>
+                    <p class="mb-3">是否要重新转录？重新转录将会：</p>
+                    <ul class="mb-3">
+                        <li>备份现有转录文件（添加 _old_日期 后缀）</li>
+                        <li>生成新的转录文件</li>
+                        <li>花费额外的时间和计算资源</li>
+                    </ul>
+                    <p class="text-muted small">
+                        <i class="fas fa-info-circle me-1"></i>
+                        如果只是想查看现有转录，请点击"取消"。
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>取消
+                    </button>
+                    <button type="button" class="btn btn-warning" id="confirmRetranscribe">
+                        <i class="fas fa-redo me-1"></i>确认重新转录
+                    </button>
                 </div>
             </div>
         </div>

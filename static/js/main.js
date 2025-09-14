@@ -5,10 +5,16 @@ class PodcastTranscriber {
         this.currentDownloadTask = null;
         this.currentTranscribeTask = null;
         this.audioFile = null;
+        this.hasExistingTranscript = false;
+        this.existingTranscriptData = null;
+        this.forceRetranscribeConfirmed = false;
         
         this.initializeElements();
         this.bindEvents();
         this.showToast = this.showToast.bind(this);
+        
+        // 初始加载音频文件列表
+        this.loadAudioFiles();
     }
     
     initializeElements() {
@@ -22,6 +28,7 @@ class PodcastTranscriber {
         this.downloadLink = document.getElementById('downloadLink');
         
         // 转录相关元素
+        this.audioSelector = document.getElementById('audioSelector');
         this.withSpeakers = document.getElementById('withSpeakers');
         this.transcribeBtn = document.getElementById('transcribeBtn');
         this.transcribeProgress = document.getElementById('transcribeProgress');
@@ -60,6 +67,12 @@ class PodcastTranscriber {
             this.startDownload();
         });
         
+        // 音频选择器变化
+        this.audioSelector.addEventListener('change', () => {
+            this.updateTranscribeButtonState();
+            this.checkExistingTranscript();
+        });
+        
         // 转录按钮点击
         this.transcribeBtn.addEventListener('click', () => {
             this.startTranscribe();
@@ -81,6 +94,124 @@ class PodcastTranscriber {
                 this.startDownload();
             }
         });
+        
+        // 确认重新转录按钮
+        document.getElementById('confirmRetranscribe').addEventListener('click', () => {
+            this.forceRetranscribe();
+        });
+    }
+    
+    async loadAudioFiles() {
+        try {
+            const response = await fetch('/api/audio-files');
+            const data = await response.json();
+            
+            if (data.success) {
+                this.populateAudioSelector(data.files);
+            } else {
+                console.error('Error loading audio files:', data.error);
+                this.audioSelector.innerHTML = '<option value="">无法加载音频文件</option>';
+            }
+        } catch (error) {
+            console.error('Error loading audio files:', error);
+            this.audioSelector.innerHTML = '<option value="">网络错误，无法加载音频文件</option>';
+        }
+    }
+    
+    populateAudioSelector(files) {
+        this.audioSelector.innerHTML = '';
+        
+        if (files.length === 0) {
+            this.audioSelector.innerHTML = '<option value="">暂无已下载的音频文件</option>';
+            return;
+        }
+        
+        // 添加默认选项
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '请选择音频文件...';
+        this.audioSelector.appendChild(defaultOption);
+        
+        // 添加音频文件选项
+        files.forEach(file => {
+            const option = document.createElement('option');
+            option.value = file.filename;
+            option.textContent = `${file.filename} (${file.size_mb} MB, ${file.modified})`;
+            this.audioSelector.appendChild(option);
+        });
+        
+        this.updateTranscribeButtonState();
+    }
+    
+    updateTranscribeButtonState() {
+        // 检查是否有选择的音频文件或已下载的文件
+        const hasSelectedFile = this.audioSelector.value !== '';
+        const hasDownloadedFile = this.audioFile !== null;
+        
+        this.transcribeBtn.disabled = !(hasSelectedFile || hasDownloadedFile);
+    }
+    
+    async checkExistingTranscript() {
+        const selectedFile = this.audioSelector.value;
+        
+        console.log('Checking existing transcript for:', selectedFile);
+        
+        if (!selectedFile) {
+            // 如果没有选择文件，清空转录结果显示
+            this.clearTranscriptDisplay();
+            return;
+        }
+        
+        try {
+            const url = `/api/transcript/${encodeURIComponent(selectedFile)}`;
+            console.log('Fetching transcript from:', url);
+            
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            console.log('Transcript API response:', data);
+            
+            if (data.success && data.exists) {
+                // 显示现有转录结果
+                console.log('Found existing transcript, displaying...');
+                this.displayExistingTranscript(data.transcript, data.created);
+                // 标记此文件已转录
+                this.hasExistingTranscript = true;
+                this.existingTranscriptData = data;
+            } else {
+                // 清空显示
+                console.log('No existing transcript found');
+                this.clearTranscriptDisplay();
+                this.hasExistingTranscript = false;
+                this.existingTranscriptData = null;
+            }
+        } catch (error) {
+            console.error('Error checking existing transcript:', error);
+            this.clearTranscriptDisplay();
+            this.hasExistingTranscript = false;
+            this.existingTranscriptData = null;
+        }
+    }
+    
+    displayExistingTranscript(transcript, created) {
+        // 显示转录内容
+        this.emptyState.classList.add('d-none');
+        this.transcriptContent.classList.remove('d-none');
+        this.transcriptText.innerHTML = this.formatTranscript(transcript);
+        
+        // 显示元数据
+        this.transcriptMeta.classList.remove('d-none');
+        this.transcriptTime.textContent = `转录时间: ${created}`;
+        
+        // 显示操作按钮
+        this.transcribeActions.classList.remove('d-none');
+    }
+    
+    clearTranscriptDisplay() {
+        this.emptyState.classList.remove('d-none');
+        this.transcriptContent.classList.add('d-none');
+        this.transcriptMeta.classList.add('d-none');
+        this.transcribeActions.classList.add('d-none');
     }
     
     async startDownload() {
@@ -181,6 +312,9 @@ class PodcastTranscriber {
             // 启用转录按钮
             this.transcribeBtn.disabled = false;
             
+            // 重新加载音频文件列表
+            this.loadAudioFiles();
+            
             this.showToast('success', '音频下载完成！');
         } else {
             throw new Error(result.error || '下载失败');
@@ -196,8 +330,16 @@ class PodcastTranscriber {
     }
     
     async startTranscribe() {
-        if (!this.audioFile) {
-            this.showToast('error', '请先下载音频文件');
+        const selectedFile = this.audioSelector.value;
+        
+        if (!selectedFile && !this.audioFile) {
+            this.showToast('error', '请选择音频文件或先下载音频');
+            return;
+        }
+        
+        // 如果选择的文件已有转录且用户未确认强制转录，显示确认对话框
+        if (selectedFile && this.hasExistingTranscript && !this.forceRetranscribeConfirmed) {
+            this.showRetranscribeConfirmation(selectedFile);
             return;
         }
         
@@ -210,16 +352,29 @@ class PodcastTranscriber {
             this.updateProgressBar(this.transcribeProgress, 0, 'bg-success');
             this.transcribeStatus.textContent = '准备转录...';
             
+            // 准备请求数据
+            const requestData = {
+                with_speakers: this.withSpeakers.checked,
+                force_retranscribe: this.forceRetranscribeConfirmed || false
+            };
+            
+            // 优先使用选择的文件
+            if (selectedFile) {
+                requestData.selected_file = selectedFile;
+            } else {
+                requestData.audio_file = this.audioFile;
+            }
+            
+            // 重置强制转录标志
+            this.forceRetranscribeConfirmed = false;
+            
             // 发送转录请求
             const response = await fetch('/api/transcribe', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    audio_file: this.audioFile,
-                    with_speakers: this.withSpeakers.checked
-                })
+                body: JSON.stringify(requestData)
             });
             
             const result = await response.json();
@@ -299,6 +454,28 @@ class PodcastTranscriber {
         this.transcribeBtn.disabled = false;
         this.transcribeBtn.innerHTML = '<i class="fas fa-play me-1"></i>开始转录';
         this.currentTranscribeTask = null;
+    }
+    
+    showRetranscribeConfirmation(filename) {
+        // 填充对话框信息
+        document.getElementById('existingTranscriptTime').textContent = this.existingTranscriptData.created;
+        document.getElementById('existingAudioFile').textContent = filename;
+        
+        // 显示对话框
+        const modal = new bootstrap.Modal(document.getElementById('retranscribeModal'));
+        modal.show();
+    }
+    
+    forceRetranscribe() {
+        // 设置强制转录标志
+        this.forceRetranscribeConfirmed = true;
+        
+        // 关闭对话框
+        const modal = bootstrap.Modal.getInstance(document.getElementById('retranscribeModal'));
+        modal.hide();
+        
+        // 开始转录
+        this.startTranscribe();
     }
     
     displayTranscript(text) {

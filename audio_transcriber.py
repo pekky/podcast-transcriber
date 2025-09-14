@@ -678,7 +678,7 @@ class AudioTranscriber:
         abbreviations = r'(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|vs|etc|i\.e|e\.g|a\.m|p\.m|U\.S|U\.K)'
         
         # First, protect abbreviations by replacing periods with a placeholder
-        protected_text = re.sub(f'({abbreviations})\.', r'\1<ABBREV>', text, flags=re.IGNORECASE)
+        protected_text = re.sub(f'({abbreviations})\\.', r'\1<ABBREV>', text, flags=re.IGNORECASE)
         
         # Split on sentence-ending punctuation followed by whitespace and capital letter or end
         sentence_pattern = r'([.!?]+)\s+(?=[A-Z]|$)'
