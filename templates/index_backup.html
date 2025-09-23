@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Podcast Transcriber - 音频转录器</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link href="/static/css/style.css" rel="stylesheet">
+</head>
+<body class="d-flex flex-column" style="height: 100vh;">
+    <div class="container-fluid h-100 d-flex flex-column">
+        <!-- Header -->
+        <header class="bg-primary text-white py-3">
+            <div class="d-flex align-items-center justify-content-between">
+                <!-- Logo和标题 -->
+                <div class="d-flex align-items-center">
+                    <i class="fas fa-microphone-alt fa-2x me-3"></i>
+                    <div>
+                        <h1 class="h3 mb-1">Podcast Transcriber</h1>
+                        <p class="mb-0 opacity-75">支持 Podcast 和 YouTube 音频转录</p>
+                    </div>
+                </div>
+                
+                <!-- 右侧控制区 -->
+                <div class="d-flex align-items-center gap-3">
+                    <!-- 音频选择器 -->
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="audioSelector" class="form-label text-white mb-0 small">
+                            <i class="fas fa-music me-1"></i>音频文件:
+                        </label>
+                        <select class="form-select form-select-sm" id="audioSelector" style="min-width: 250px;">
+                            <option value="">正在加载音频文件...</option>
+                        </select>
+                    </div>
+                    
+                    <!-- 转录选项 -->
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="withSpeakers">
+                        <label class="form-check-label text-white small" for="withSpeakers">
+                            <i class="fas fa-users me-1"></i>说话人识别
+                        </label>
+                    </div>
+                    
+                    <!-- 操作按钮 -->
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-light btn-sm" id="addAudioBtn">
+                            <i class="fas fa-plus me-1"></i>添加音频
+                        </button>
+                        <button type="button" class="btn btn-success btn-sm" id="transcribeBtn" disabled>
+                            <i class="fas fa-play me-1"></i>转录
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 进度条 -->
+            <div id="headerProgressBar" class="mt-2 d-none">
+                <div class="progress" style="height: 4px;">
+                    <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                </div>
+                <small id="headerProgressText" class="text-white-50">准备中...</small>
+            </div>
+        </header>
+
+        <div class="row">
+            <!-- 左侧控制面板 -->
+            <div class="col-lg-4 col-md-5">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-light">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-download me-2"></i>音频下载
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- URL 输入 -->
+                        <div class="mb-3">
+                            <label for="urlInput" class="form-label">
+                                <i class="fas fa-link me-1"></i>Podcast/YouTube 链接
+                            </label>
+                            <div class="input-group">
+                                <input type="url" class="form-control" id="urlInput" 
+                                       placeholder="输入 Podcast 或 YouTube 链接">
+                                <button class="btn btn-primary" type="button" id="downloadBtn">
+                                    <i class="fas fa-download"></i>
+                                </button>
+                            </div>
+                            <div class="form-text">
+                                支持 Apple Podcasts、RSS 订阅源、YouTube 等平台
+                            </div>
+                        </div>
+
+                        <!-- 下载进度 -->
+                        <div id="downloadProgress" class="d-none">
+                            <div class="mb-2">
+                                <small class="text-muted">下载进度</small>
+                            </div>
+                            <div class="progress mb-3">
+                                <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <div class="alert alert-info d-flex align-items-center">
+                                <i class="fas fa-spinner fa-spin me-2"></i>
+                                <span id="downloadStatus">准备下载...</span>
+                            </div>
+                        </div>
+
+                        <!-- 下载结果 -->
+                        <div id="downloadResult" class="d-none">
+                            <div class="alert alert-success">
+                                <i class="fas fa-check-circle me-2"></i>
+                                <strong>下载完成！</strong>
+                                <div class="mt-2">
+                                    <small>文件: <span id="audioFileName"></span></small>
+                                </div>
+                            </div>
+                            <div class="d-grid gap-2">
+                                <a href="#" id="downloadLink" class="btn btn-outline-success btn-sm">
+                                    <i class="fas fa-download me-1"></i>下载音频文件
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 转录面板 -->
+                <div class="card shadow-sm mt-4">
+                    <div class="card-header bg-light">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-file-alt me-2"></i>语音转录
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- 音频文件选择器 -->
+                        <div class="mb-3">
+                            <label for="audioSelector" class="form-label">
+                                <i class="fas fa-music me-1"></i>选择音频文件
+                            </label>
+                            <select class="form-select" id="audioSelector">
+                                <option value="">正在加载音频文件...</option>
+                            </select>
+                            <div class="form-text">
+                                选择已下载的音频文件进行转录
+                            </div>
+                        </div>
+
+                        <!-- 转录选项 -->
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="withSpeakers">
+                                <label class="form-check-label" for="withSpeakers">
+                                    <i class="fas fa-users me-1"></i>识别不同说话人
+                                </label>
+                            </div>
+                            <div class="form-text">
+                                启用说话人识别需要更长时间，但能区分对话者
+                            </div>
+                        </div>
+
+                        <!-- 转录按钮 -->
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-success" id="transcribeBtn" disabled>
+                                <i class="fas fa-play me-1"></i>开始转录
+                            </button>
+                        </div>
+
+                        <!-- 转录进度 -->
+                        <div id="transcribeProgress" class="d-none mt-3">
+                            <div class="progress mb-3">
+                                <div class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <div class="alert alert-info d-flex align-items-center">
+                                <i class="fas fa-spinner fa-spin me-2"></i>
+                                <span id="transcribeStatus">准备转录...</span>
+                            </div>
+                        </div>
+
+                        <!-- 转录完成操作 -->
+                        <div id="transcribeActions" class="d-none mt-3">
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="exportBtn">
+                                    <i class="fas fa-file-export me-1"></i>导出 Markdown
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="clearBtn">
+                                    <i class="fas fa-trash me-1"></i>清空结果
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 使用说明 -->
+                <div class="card shadow-sm mt-4">
+                    <div class="card-header bg-light">
+                        <h6 class="card-title mb-0">
+                            <i class="fas fa-info-circle me-2"></i>使用说明
+                        </h6>
+                    </div>
+                    <div class="card-body small">
+                        <ol class="mb-0">
+                            <li>粘贴 Podcast 或 YouTube 链接</li>
+                            <li>点击下载按钮获取音频</li>
+                            <li>选择是否需要说话人识别</li>
+                            <li>点击开始转录</li>
+                            <li>转录完成后可导出 Markdown 格式</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧结果展示 -->
+            <div class="col-lg-8 col-md-7">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-scroll me-2"></i>转录结果
+                        </h5>
+                        <div id="transcriptMeta" class="d-none">
+                            <small class="text-muted">
+                                <i class="fas fa-clock me-1"></i>
+                                <span id="transcriptTime"></span>
+                            </small>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- 空状态 -->
+                        <div id="emptyState" class="text-center text-muted py-5">
+                            <i class="fas fa-file-alt fa-3x mb-3 opacity-50"></i>
+                            <h6>转录结果将在这里显示</h6>
+                            <p class="small">请先下载音频文件，然后开始转录</p>
+                        </div>
+
+                        <!-- 转录内容 -->
+                        <div id="transcriptContent" class="d-none">
+                            <div class="transcript-text border rounded p-3" 
+                                 style="height: 600px; overflow-y: auto; font-family: 'Consolas', monospace; line-height: 1.6; background-color: #f8f9fa;">
+                                <div id="transcriptText"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 重新转录确认对话框 -->
+    <div class="modal fade" id="retranscribeModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title">
+                        <i class="fas fa-exclamation-triangle me-2"></i>确认重新转录
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">检测到此音频文件已经转录过了：</p>
+                    <div class="alert alert-info">
+                        <small>
+                            <i class="fas fa-file-alt me-1"></i>
+                            <strong>转录时间：</strong><span id="existingTranscriptTime"></span><br>
+                            <i class="fas fa-music me-1"></i>
+                            <strong>音频文件：</strong><span id="existingAudioFile"></span>
+                        </small>
+                    </div>
+                    <p class="mb-3">是否要重新转录？重新转录将会：</p>
+                    <ul class="mb-3">
+                        <li>备份现有转录文件（添加 _old_日期 后缀）</li>
+                        <li>生成新的转录文件</li>
+                        <li>花费额外的时间和计算资源</li>
+                    </ul>
+                    <p class="text-muted small">
+                        <i class="fas fa-info-circle me-1"></i>
+                        如果只是想查看现有转录，请点击"取消"。
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>取消
+                    </button>
+                    <button type="button" class="btn btn-warning" id="confirmRetranscribe">
+                        <i class="fas fa-redo me-1"></i>确认重新转录
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 通知 -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="successToast" class="toast" role="alert">
+            <div class="toast-header bg-success text-white">
+                <i class="fas fa-check-circle me-2"></i>
+                <strong class="me-auto">成功</strong>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body"></div>
+        </div>
+        
+        <div id="errorToast" class="toast" role="alert">
+            <div class="toast-header bg-danger text-white">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong class="me-auto">错误</strong>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body"></div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JS -->
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

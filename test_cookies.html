@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cookie Functionality Test</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Cookie功能测试</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- 英语水平选择 -->
+                        <div class="mb-4">
+                            <h6>英语水平</h6>
+                            <div class="dropdown">
+                                <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="englishLevelDropdown" data-bs-toggle="dropdown">
+                                    <span id="englishLevelText">中高级 (IELTS 6.0)</span>
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><h6 class="dropdown-header">英语水平</h6></li>
+                                    <li><a class="dropdown-item" href="#" data-level="4.0">初级 (IELTS 4.0)</a></li>
+                                    <li><a class="dropdown-item" href="#" data-level="5.0">中级 (IELTS 5.0)</a></li>
+                                    <li><a class="dropdown-item active" href="#" data-level="6.0">中高级 (IELTS 6.0)</a></li>
+                                    <li><a class="dropdown-item" href="#" data-level="7.0">高级 (IELTS 7.0)</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <!-- 发音偏好选择 -->
+                        <div class="mb-4">
+                            <h6>发音偏好</h6>
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-outline-primary" data-accent="us" id="accentUS">
+                                    美音 (US) <span class="badge bg-success ms-1" style="display: none;">✓</span>
+                                </button>
+                                <button class="btn btn-outline-primary" data-accent="uk" id="accentUK">
+                                    英音 (UK) <span class="badge bg-success ms-1" style="display: none;">✓</span>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- 测试按钮 -->
+                        <div class="mb-4">
+                            <button class="btn btn-primary me-2" id="saveSettings">保存设置</button>
+                            <button class="btn btn-secondary me-2" id="loadSettings">加载设置</button>
+                            <button class="btn btn-warning" id="clearCookies">清除Cookie</button>
+                        </div>
+                        
+                        <!-- 显示当前值 -->
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6>当前设置</h6>
+                                <p><strong>英语水平:</strong> <span id="currentLevel">-</span></p>
+                                <p><strong>发音偏好:</strong> <span id="currentAccent">-</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        class CookieTest {
+            constructor() {
+                this.englishLevel = this.getStoredEnglishLevel();
+                this.accentPreference = this.getStoredAccentPreference();
+                
+                this.bindEvents();
+                this.updateDisplay();
+            }
+            
+            // Cookie操作方法
+            setCookie(name, value, days = 365) {
+                const expires = new Date(Date.now() + days * 864e5).toUTCString();
+                document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/`;
+                console.log(`Cookie设置: ${name} = ${value}`);
+            }
+            
+            getCookie(name) {
+                return document.cookie.split('; ').reduce((r, v) => {
+                    const parts = v.split('=');
+                    return parts[0] === name ? decodeURIComponent(parts[1]) : r;
+                }, '');
+            }
+            
+            // 获取存储的英语水平
+            getStoredEnglishLevel() {
+                const stored = this.getCookie('englishLevel');
+                // 默认返回"中高级"(IELTS 6.0)
+                return stored || '6.0';
+            }
+            
+            // 获取存储的发音偏好
+            getStoredAccentPreference() {
+                const stored = this.getCookie('accentPreference');
+                // 默认返回美音
+                return stored || 'us';
+            }
+            
+            bindEvents() {
+                // 英语水平选择
+                document.querySelectorAll('[data-level]').forEach(item => {
+                    item.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        this.setEnglishLevel(e.target.dataset.level);
+                    });
+                });
+                
+                // 发音偏好选择
+                document.querySelectorAll('[data-accent]').forEach(item => {
+                    item.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        this.setAccentPreference(e.target.dataset.accent);
+                    });
+                });
+                
+                // 测试按钮
+                document.getElementById('saveSettings').addEventListener('click', () => {
+                    this.setCookie('englishLevel', this.englishLevel);
+                    this.setCookie('accentPreference', this.accentPreference);
+                    alert('设置已保存到Cookie!');
+                });
+                
+                document.getElementById('loadSettings').addEventListener('click', () => {
+                    this.englishLevel = this.getStoredEnglishLevel();
+                    this.accentPreference = this.getStoredAccentPreference();
+                    this.updateDisplay();
+                    alert('设置已从Cookie加载!');
+                });
+                
+                document.getElementById('clearCookies').addEventListener('click', () => {
+                    this.setCookie('englishLevel', '', -1);
+                    this.setCookie('accentPreference', '', -1);
+                    this.englishLevel = this.getStoredEnglishLevel();
+                    this.accentPreference = this.getStoredAccentPreference();
+                    this.updateDisplay();
+                    alert('Cookie已清除，恢复默认设置!');
+                });
+            }
+            
+            setEnglishLevel(level) {
+                this.englishLevel = level;
+                this.setCookie('englishLevel', level);
+                this.updateEnglishLevelUI();
+                this.updateDisplay();
+                
+                // 更新下拉按钮文本
+                const levelTexts = {
+                    '4.0': '初级 (IELTS 4.0)',
+                    '5.0': '中级 (IELTS 5.0)',
+                    '6.0': '中高级 (IELTS 6.0)',
+                    '7.0': '高级 (IELTS 7.0)'
+                };
+                document.getElementById('englishLevelText').textContent = levelTexts[level] || level;
+            }
+            
+            setAccentPreference(accent) {
+                this.accentPreference = accent;
+                this.setCookie('accentPreference', accent);
+                this.updateAccentUI();
+                this.updateDisplay();
+            }
+            
+            updateEnglishLevelUI() {
+                document.querySelectorAll('[data-level]').forEach(item => {
+                    item.classList.toggle('active', item.dataset.level === this.englishLevel);
+                });
+            }
+            
+            updateAccentUI() {
+                document.getElementById('accentUS').querySelector('.badge').style.display = this.accentPreference === 'us' ? 'inline' : 'none';
+                document.getElementById('accentUK').querySelector('.badge').style.display = this.accentPreference === 'uk' ? 'inline' : 'none';
+            }
+            
+            updateDisplay() {
+                this.updateEnglishLevelUI();
+                this.updateAccentUI();
+                
+                document.getElementById('currentLevel').textContent = this.englishLevel;
+                document.getElementById('currentAccent').textContent = this.accentPreference;
+            }
+        }
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            new CookieTest();
+        });
+    </script>
+</body>
+</html>

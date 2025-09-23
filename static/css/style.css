@@ -283,3 +283,305 @@ header {
     color: #dc3545;
     font-weight: 500;
 }
+
+/* Header控制区域样式 */
+.header-controls {
+    gap: 1rem;
+}
+
+.header-controls .form-select {
+    background-color: rgba(255, 255, 255, 0.95);
+    border-color: rgba(255, 255, 255, 0.3);
+    transition: all 0.2s ease;
+}
+
+.header-controls .form-select:focus {
+    background-color: #fff;
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.header-controls .form-check-input {
+    background-color: rgba(255, 255, 255, 0.9);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.header-controls .form-check-input:checked {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+/* Header进度条样式 */
+#headerProgressBar .progress {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+#headerProgressBar .progress-bar {
+    background: linear-gradient(90deg, #28a745, #20c997);
+}
+
+/* Main content area */
+main .card-body {
+    min-height: calc(100vh - 200px);
+}
+
+/* 响应式Header控制 */
+@media (max-width: 992px) {
+    .header-controls {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: stretch !important;
+    }
+    
+    .header-controls .form-select {
+        min-width: auto !important;
+        width: 250px !important;
+    }
+    
+    .header-controls .d-flex.align-items-center {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+}
+
+@media (max-width: 768px) {
+    header .d-flex {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    header .justify-content-between {
+        justify-content: center !important;
+    }
+    
+    .header-controls {
+        width: 100%;
+        margin-right: 10px !important;
+    }
+}
+
+/* Modal增强样式 */
+.modal-header.bg-primary {
+    background: linear-gradient(135deg, #007bff, #0056b3) !important;
+}
+
+.modal-header.bg-primary .btn-close-white:hover {
+    opacity: 0.8;
+    transform: scale(1.1);
+}
+
+/* 转录结果区域优化 */
+.transcript-text {
+    max-height: calc(100vh - 200px);
+    min-height: 400px;
+}
+
+/* 英语学习面板样式 */
+.vocab-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.sentence-list {
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+/* 生词卡片样式 */
+.vocab-item {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+    transition: all 0.2s ease;
+}
+
+.vocab-item:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border-color: #007bff;
+}
+
+.vocab-word {
+    font-weight: 600;
+    color: #007bff;
+    font-size: 1.1em;
+    margin-bottom: 4px;
+}
+
+.vocab-phonetic {
+    color: #6c757d;
+    font-style: italic;
+    font-size: 0.9em;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.phonetic-controls {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.pronunciation-btn {
+    background: none;
+    border: none;
+    color: #007bff;
+    font-size: 0.8em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.pronunciation-btn:hover {
+    background-color: #007bff;
+    color: white;
+    transform: translateY(-1px);
+}
+
+.pronunciation-btn:active {
+    transform: translateY(0);
+}
+
+.pronunciation-btn.playing {
+    background-color: #28a745;
+    color: white;
+    animation: pulse-audio 1s infinite;
+}
+
+.pronunciation-btn.loading {
+    color: #6c757d;
+    cursor: not-allowed;
+}
+
+.pronunciation-btn.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+    border: 1px solid currentColor;
+    border-top: 1px solid transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes pulse-audio {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+@keyframes spin {
+    0% { transform: translate(-50%, -50%) rotate(0deg); }
+    100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.accent-flag {
+    width: 16px;
+    height: 12px;
+    display: inline-block;
+    margin-right: 4px;
+    border-radius: 2px;
+}
+
+.vocab-definition {
+    color: #495057;
+    font-size: 0.9em;
+    line-height: 1.4;
+}
+
+.vocab-level {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-size: 0.7em;
+    font-weight: 500;
+    margin-top: 4px;
+}
+
+.vocab-level.high {
+    background-color: #dc3545;
+    color: white;
+}
+
+.vocab-level.medium {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.vocab-level.advanced {
+    background-color: #6f42c1;
+    color: white;
+}
+
+/* 复杂句子样式 */
+.sentence-item {
+    background: linear-gradient(135deg, #f0f8f0, #e6f3e6);
+    border: 1px solid #c3e6cb;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    transition: all 0.2s ease;
+}
+
+.sentence-item:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border-color: #28a745;
+}
+
+.sentence-text {
+    color: #155724;
+    font-size: 0.9em;
+    line-height: 1.5;
+    margin-bottom: 6px;
+}
+
+.sentence-complexity {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.7em;
+    font-weight: 500;
+    background-color: #28a745;
+    color: white;
+}
+
+/* 英语水平设置下拉框 */
+.dropdown-menu {
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+
+.dropdown-item.active {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+}
+
+/* 响应式双栏布局 */
+@media (max-width: 768px) {
+    main .row {
+        flex-direction: column;
+    }
+    
+    main .col-lg-8,
+    main .col-lg-4 {
+        max-width: 100%;
+        flex: none;
+    }
+    
+    main .col-lg-4 {
+        margin-top: 1rem;
+    }
+    
+    .vocab-list,
+    .sentence-list {
+        max-height: 200px;
+    }
+}

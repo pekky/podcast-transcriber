@@ -264,52 +264,89 @@ class PodcastDownloader:
         return success_count > 0
     
     def download_youtube_audio(self, url: str) -> bool:
-        """Download audio from YouTube video."""
+        """Download audio from YouTube video with automatic browser cookie support."""
         if not YTDLP_AVAILABLE:
             print("❌ yt-dlp not installed. Cannot download from YouTube.")
             print("Install with: pip install yt-dlp")
             return False
         
-        try:
-            print("🎬 Processing YouTube URL...")
-            
-            # Configure yt-dlp options (download audio without conversion to avoid ffmpeg dependency)
-            ydl_opts = {
-                'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
-                'outtmpl': str(self.output_dir / '%(title)s.%(ext)s'),
-                'quiet': False,
-                'no_warnings': False,
-            }
-            
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Get video info first
-                info = ydl.extract_info(url, download=False)
-                title = info.get('title', 'Unknown')
-                duration = info.get('duration', 0)
+        # List of browsers to try for cookie extraction (in order of preference)
+        browsers_to_try = ['chrome', 'firefox', 'safari', 'edge', 'opera']
+        
+        for attempt, browser in enumerate(browsers_to_try):
+            try:
+                print(f"🎬 Processing YouTube URL... (attempt {attempt + 1}/{len(browsers_to_try)})")
+                if attempt > 0:
+                    print(f"🍪 Trying {browser.title()} browser cookies...")
+                elif attempt == 0:
+                    print(f"🍪 Using {browser.title()} browser cookies...")
                 
-                print(f"📹 Title: {title}")
-                if duration:
-                    mins, secs = divmod(duration, 60)
-                    print(f"⏱️  Duration: {mins}m {secs}s")
+                # Configure yt-dlp options with automatic cookie extraction
+                ydl_opts = {
+                    'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best',
+                    'outtmpl': str(self.output_dir / '%(title)s.%(ext)s'),
+                    'quiet': False,
+                    'no_warnings': False,
+                    'cookiesfrombrowser': (browser, None, None, None),  # (browser, profile, keyring, container)
+                }
                 
-                # Download the audio
-                print("⬇️  Downloading audio...")
-                ydl.download([url])
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    # Get video info first
+                    info = ydl.extract_info(url, download=False)
+                    title = info.get('title', 'Unknown')
+                    duration = info.get('duration', 0)
+                    
+                    print(f"📹 Title: {title}")
+                    if duration:
+                        mins, secs = divmod(duration, 60)
+                        print(f"⏱️  Duration: {mins}m {secs}s")
+                    
+                    # Download the audio
+                    print("⬇️  Downloading audio...")
+                    ydl.download([url])
+                    
+                    print(f"✅ Successfully downloaded: {title}")
+                    print(f"🍪 Success using {browser.title()} cookies!")
+                    return True
+                    
+            except Exception as e:
+                error_msg = str(e).lower()
                 
-                print(f"✅ Successfully downloaded: {title}")
-                return True
+                # Check for specific error types
+                if "sign in" in error_msg or "not a bot" in error_msg or "cookies" in error_msg:
+                    print(f"🔐 Authentication required with {browser.title()}")
+                    if attempt < len(browsers_to_try) - 1:
+                        print(f"🔄 Trying next browser...")
+                        continue
+                elif "private" in error_msg or "unavailable" in error_msg:
+                    print(f"❌ Video is private or unavailable: {e}")
+                    return False
+                elif "copyright" in error_msg:
+                    print(f"❌ Copyright restriction: {e}")
+                    return False
+                elif "region" in error_msg or "country" in error_msg:
+                    print(f"❌ Geographic restriction: {e}")
+                    return False
+                elif "no such browser" in error_msg or "browser not found" in error_msg:
+                    print(f"⚠️  {browser.title()} browser not found, trying next...")
+                    if attempt < len(browsers_to_try) - 1:
+                        continue
+                else:
+                    print(f"⚠️  Error with {browser.title()}: {e}")
+                    if attempt < len(browsers_to_try) - 1:
+                        continue
                 
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "private" in error_msg or "unavailable" in error_msg:
-                print(f"❌ Video is private or unavailable: {e}")
-            elif "copyright" in error_msg:
-                print(f"❌ Copyright restriction: {e}")
-            elif "region" in error_msg or "country" in error_msg:
-                print(f"❌ Geographic restriction: {e}")
-            else:
-                print(f"❌ Error downloading from YouTube: {e}")
-            return False
+                # If this is the last attempt, show final error
+                if attempt == len(browsers_to_try) - 1:
+                    print(f"❌ All browser cookie attempts failed. Final error: {e}")
+                    print("💡 Suggestions:")
+                    print("   1. Make sure you're logged into YouTube in your browser")
+                    print("   2. Try visiting the video in your browser first")
+                    print("   3. Check that the video is public and not region-locked")
+                    print("   4. Try a different video URL")
+                    return False
+        
+        return False
     
     def get_url_with_validation(self) -> str:
         """Prompt user for URL with validation and retry."""
